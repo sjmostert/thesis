@@ -1,0 +1,1606 @@
+# %% Import libraries and extract input filename
+# Import necessary libraries
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.ticker as mticker
+import ltspice
+import numpy as np
+import re
+import os
+import copy
+from typing import List, Dict, Any
+import pandas as pd
+
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "mathtext.fontset": "dejavusans",
+})
+
+# Select file to analyze
+filename = "new_base"
+filepath = fr"C:\Users\moste\OneDrive - Delft University of Technology\Documenten\Studie\Systems and Control\Economic Engineering\Thesis\Models\Final\New price bids\Spice\{filename}.raw"
+l = ltspice.Ltspice(filepath)
+l.parse()
+
+# Set scenario prefix and CSV folder path
+scenario_prefix = 'HW_no_control'
+csv_folder = r'C:\Users\moste\OneDrive - Delft University of Technology\Documenten\Studie\Systems and Control\Economic Engineering\Thesis\Overleaf\Thesis\Plotting data\Daily\New\Base'
+
+# Define filepath for cleaned generation mix data
+res_input_filename = 'res_input'
+res_input_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{res_input_filename}.csv')
+
+# Define filepath for cleaned generation mix data
+genmix_filename = 'generation_mix'
+genmix_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{genmix_filename}.csv')
+
+# Define filepath for day-ahead price data
+da_price_filename = 'da_price'
+da_price_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{da_price_filename}.csv')
+
+# Define filepath for day-ahead income data
+da_income_filename = 'da_income'
+da_income_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{da_income_filename}.csv')
+
+# Define filepath for intraday price data
+id_price_filename = 'id_price'
+id_price_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{id_price_filename}.csv')
+
+# Define filepath for imbalance price data
+imbal_price_filename = 'imbal_price'
+imbal_price_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{imbal_price_filename}.csv')
+
+# Define filepath for initial quantity per generator data
+init_qty_filename = 'init_qty'
+init_qty_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{init_qty_filename}.csv')
+
+# Define filepath for imbalance per generator data
+imbal_filename = 'remaining_imbal'
+imbal_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{imbal_filename}.csv')
+
+# Define filepath for the net imbalance data
+net_imbal_filename = 'net_imbal'
+net_imbal_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{net_imbal_filename}.csv')
+
+# Define filepath for the intraday trading income data
+id_trading_income = 'id_trading_income'
+id_trading_income_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{id_trading_income}.csv')
+
+# Define filepath for the imbalance settlement data
+imbal_income = 'imbal_income'
+imbal_income_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{imbal_income}.csv')
+
+# Define filepath for the total income data
+total_income = 'total_income'
+total_income_filepath = os.path.join(csv_folder, f'{scenario_prefix}_{total_income}.csv')
+
+# Define filepath for the total portfolio income data
+total_portfolio_income_filename = 'total_portfolio_income'
+total_portfolio_income_path = os.path.join(csv_folder, f'{scenario_prefix}_{total_portfolio_income_filename}.csv')
+
+# Extract demand input data filename
+asc_path = fr"C:\Users\moste\OneDrive - Delft University of Technology\Documenten\Studie\Systems and Control\Economic Engineering\Thesis\Models\Final\Spice\{filename}.asc"
+pattern = r'file\s*=\s*"?([A-Za-z]:\\(?:[^\\"]+\\)*[^\\"]*electricity_demand[^\\"]*\.txt)"?'
+
+# %% Extract and plot day-ahead electricity flow and offer data
+
+time = l.get_time()
+demand = l.get_data('I(electricity_demand)')
+act_demand = l.get_data('I(act_electricity_demand)')
+
+solar_supply = l.get_data('I(solar_supply)')
+solar_offer = l.get_data('I(solar_offer)')
+act_solar_supply = l.get_data('I(act_solar_supply)')
+
+wind_supply = l.get_data('I(wind_supply)')
+wind_offer = l.get_data('I(wind_offer)')
+act_wind_supply = l.get_data('I(act_wind_supply)')
+
+nuclear_supply = l.get_data('I(nuclear_supply)')
+nuclear_offer = l.get_data('I(nuclear_offer)')
+
+wind_curtail = l.get_data('I(wind_curtail)')
+
+coal_supply = l.get_data('I(d_coal)')
+coal_offer = l.get_data('I(coal_offer)')
+
+gas_supply = l.get_data('I(d_gas)')
+gas_offer = l.get_data('I(gas_offer)')
+
+bess_supply = l.get_data('I(bess_control)')
+bess_offer = l.get_data('I(bess_offer)')
+
+i_el_market = l.get_data('I(el_market_balance)')
+
+total_supply = solar_supply + wind_supply - wind_curtail + nuclear_supply + gas_supply + coal_supply - bess_supply
+
+colors = ['#B0BEC5',  # Nuclear (light grey-blue)
+          '#CCCCCC',  # Gas
+          '#9E9E9E',  # Coal (dark grey)
+          '#FDBE87',  # Solar (light orange)
+          '#A3D5FF',  # Wind (light blue)
+          #'#E57373',  # Curtailed Wind (red)
+          "#5CFF4D",  # BESS (light green)
+          ]
+
+labels = ['Nuclear', 'Gas', 'Coal', 'Solar', 'Wind', 'BESS']
+
+net_wind = wind_supply - wind_curtail
+
+plt.figure(figsize=(12, 6))
+plt.stackplot(time,
+              nuclear_supply,
+              gas_supply,
+              coal_supply,
+              solar_supply,
+              net_wind,
+              #wind_curtail,
+              bess_supply,
+              labels=labels,
+              colors=colors,
+              alpha=0.9)
+
+# Plot demand
+plt.plot(time, demand, label='Demand', color='black', linewidth=2)
+
+handles, labels = plt.gca().get_legend_handles_labels()
+plt.ylabel(r'Generation [GW]', fontsize=18)
+plt.xlabel(r'Time [h]', fontsize=18)
+plt.legend(reversed(handles), reversed(labels), loc='upper left', fontsize=12)
+plt.grid(True, linestyle=':', alpha=0.6)
+plt.xticks([0, 4, 8, 12, 16, 20, 24], fontsize=14)
+plt.yticks([0,1,2,3,4],fontsize=14)
+plt.xlim(0, 24)
+plt.tight_layout()
+plt.show()
+
+# Create .csv output files for plotting
+da_supply_incentive = l.get_data('I(da_incentive_to_supply)')
+df_res_input = pd.DataFrame({
+    'time': time,
+    'nuclear': nuclear_supply,
+    'nuclear_offer': 100*nuclear_offer,
+    'gas': gas_supply,
+    'gas_offer': 100*gas_offer,
+    'coal': coal_supply,
+    'coal_offer': 100*coal_offer,
+    'solar': solar_supply,
+    'solar_offer': 100*solar_offer,
+    'wind': net_wind,
+    'wind_offer': 100*wind_offer,
+    'bess': bess_supply,
+    'bess_offer': 100*bess_offer,
+    'demand': demand,
+    'da_supply_incentive': da_supply_incentive
+})
+
+df_res_input['hour'] = df_res_input['time'].round().astype(int)
+df_hourly_res = df_res_input.groupby('hour').mean().reset_index()
+df_hourly_res = df_hourly_res[df_hourly_res['hour'] < 25]
+df_clean_res = df_hourly_res.round(4)
+df_clean_res.to_csv(res_input_filepath, index=False)
+
+# Generation Mix
+df_genmix = pd.DataFrame({
+    'time': time,
+    'nuclear': nuclear_supply,
+    'gas': gas_supply,
+    'coal': coal_supply,
+    'solar': solar_supply,
+    'wind': net_wind,
+    'bess': bess_supply,
+    'demand': demand
+})
+
+
+df_genmix['hour'] = df_genmix['time'].round().astype(int)
+df_hourly = df_genmix.groupby('hour').mean().reset_index()
+df_hourly = df_hourly.drop(columns=['time']).rename(columns={'hour': 'time'})
+neg_bess = df_hourly['bess'] < 0
+
+# subtract charging power from wind
+df_hourly.loc[neg_bess, 'wind'] = (
+    df_hourly.loc[neg_bess, 'wind'] + df_hourly.loc[neg_bess, 'bess']
+)
+
+df_hourly.loc[neg_bess, 'bess'] = -df_hourly.loc[neg_bess, 'bess']
+df_clean = df_hourly.round(4)
+df_clean.to_csv(genmix_filepath, index=False)
+
+# %% Stepwise Day-Ahead Price and Cumulative Income Calculation
+mcp = l.get_data('V(mcp)')
+mcp = 100 * mcp
+
+da_mtu_size = 0.25  # 15-minute MTU
+total_da_mtu = int(np.floor(time[-1] / da_mtu_size))
+gen_signals = {
+    'Nuclear': nuclear_supply,
+    'Gas': gas_supply,
+    'Coal': coal_supply,
+    'Solar': solar_supply,
+    'Wind': net_wind,
+    'BESS': bess_supply
+}
+
+avg_mcp_per_mtu = []
+step_times = []  
+mtu_times = [0.0]   
+cumulative_da_income = {name: [0.0] for name in gen_signals.keys()}
+
+for i in range(total_da_mtu):
+    t0 = i * da_mtu_size
+    t1 = (i + 1) * da_mtu_size
+    t_interp = np.linspace(t0, t1, 10) 
+    step_times.extend([t0, t1])
+    mtu_times.append(t1)
+    
+    mcp_interp = np.interp(t_interp, time, mcp)
+    avg_mcp = np.trapz(mcp_interp, t_interp) / da_mtu_size
+    avg_mcp_per_mtu.append(avg_mcp)
+
+    for name, signal in gen_signals.items():
+        if name == 'Wind Storage':
+            cumulative_da_income[name].append(cumulative_da_income[name][-1])
+            continue
+            
+        sig_interp = np.interp(t_interp, time, signal)
+        avg_qty = np.trapz(sig_interp, t_interp) / da_mtu_size
+        revenue_mtu = avg_qty * avg_mcp * da_mtu_size
+        cumulative_da_income[name].append(cumulative_da_income[name][-1] + revenue_mtu)
+
+step_prices = np.repeat(avg_mcp_per_mtu, 2)
+
+# %% Export Data to CSV
+# Price CSV
+df_da_price = pd.DataFrame({'time': step_times, 'price': step_prices}).round(4)
+df_da_price.to_csv(da_price_filepath, index=False)
+
+# Income CSV
+df_da_income = pd.DataFrame({'time': mtu_times})
+for name, income in cumulative_da_income.items():
+    df_da_income[name.lower()] = income
+df_da_income.round(4).to_csv(da_income_filepath, index=False)
+
+# %% Plotting results
+
+plt.figure(figsize=(12, 6))
+plt.step(step_times, step_prices, where='post', label='Day-Ahead Price', linewidth=2, color='black')
+plt.ylabel(r'Price [€/MWh]', fontsize=18)
+plt.xlabel(r'Time [h]', fontsize=18)
+plt.grid(True, linestyle=':', alpha=0.6)
+plt.xticks([0, 4, 8, 12, 16, 20, 24], fontsize=14)
+plt.axhline(0, color='black', linewidth=1.5, linestyle='--')
+plt.xlim(0, 24)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(14, 7))
+da_colors = {'Nuclear': '#B0BEC5', 'Gas': '#CCCCCC', 'Coal': '#9E9E9E', 
+             'Solar': '#FDBE87', 'Wind': '#A3D5FF', 'BESS': '#5CFF4D'}
+for name, income_list in cumulative_da_income.items():
+    plt.step(mtu_times, income_list, where='post', label=name, color=da_colors[name], linewidth=2.5)
+plt.title('Cumulative Day-Ahead Income (MTU Settlement)', fontsize=18)
+plt.ylabel('Cumulative Income [€]', fontsize=16)
+plt.xlabel('Time [h]', fontsize=16)
+plt.grid(True, linestyle=':', alpha=0.6)
+plt.xticks([0, 4, 8, 12, 16, 20, 24], fontsize=14)
+plt.xlim(0, 24)
+plt.legend(loc='upper left', fontsize=12)
+plt.tight_layout()
+plt.show()
+
+# %% Extract intraday and balancing market data
+
+id_bess_supply = l.get_data('I(id_bess_control)')
+id_gas_supply = l.get_data('I(id_gas)')
+id_wind_supply = l.get_data('I(id_wind_supply)')
+id_solar_supply = l.get_data('I(id_solar_supply)')
+id_electricity_supply = l.get_data('I(id_electricity_supply)')
+
+id_bess_price = l.get_data('I(bess_price_offset)')
+id_bess_price = 100*id_bess_price
+id_gas_price = l.get_data('I(gas_price_offset)')
+id_gas_price = 100*id_gas_price
+id_wind_price = l.get_data('I(wind_price_offset)')
+id_wind_price = 100*id_wind_price
+id_solar_price = l.get_data('I(solar_price_offset)')
+id_solar_price = 100*id_solar_price
+id_demand_price = l.get_data('I(demand_price_offset)')
+id_demand_price = 100*id_demand_price
+
+id_bal_supply = l.get_data('I(id_bal_supply)')
+imbal_price = l.get_data('I(imbal_price)')
+imbal_price = 100 * imbal_price
+
+# Plot initial intraday quantities
+plt.figure(figsize=(12, 6))
+plt.plot(time, id_solar_supply, color = '#FDBE87', label='Solar')
+plt.plot(time, id_wind_supply, color='#A3D5FF', label='Wind')
+plt.plot(time, id_gas_supply, color='#CCCCCC', label='Gas')
+plt.plot(time, id_bess_supply, color='#5CFF4D', label='BESS')
+plt.plot(time, id_electricity_supply, color='purple', label='Retailers', linewidth=2)
+plt.xlabel('Time [h]')
+plt.ylabel('Initial Quantity Submitted to Intraday (MWh)')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Plot solar supply with forecast error
+plt.figure(figsize=(12, 6))
+plt.stackplot(time,
+              solar_supply,
+              act_solar_supply - solar_supply,
+              labels=['Day-Ahead Solar Supply', 'Forecast Error (Surplus)'], # <-- FIX 1: Add labels
+              colors=['#FDBE87', "#0AB318"],
+              alpha=1)
+
+plt.plot(time, act_solar_supply, color = 'black', label='Actual Solar Supply', linewidth=2)
+# Labels and formatting
+plt.xlabel('Time of day', fontsize=22)
+plt.ylabel('Generation (MWh)', fontsize=22)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True)
+plt.gca().set_yticklabels([])
+plt.xticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+# Plot wind supply with forecast error
+plt.figure(figsize=(12, 6))
+plt.stackplot(time,
+              wind_supply,
+              act_wind_supply - wind_supply,
+              labels=['Day-Ahead Wind Supply', 'Forecast Error (Deficit)'],
+              colors=['#A3D5FF', '#E57373'],
+              alpha=1)
+
+plt.plot(time, act_wind_supply, color = 'black', label='Actual Wind Supply', linewidth=2)
+# Labels and formatting
+plt.xlabel('Time of day', fontsize=22)
+plt.ylabel('Generation (MWh)', fontsize=22)
+#plt.title(f'Multiport Simulation', fontsize=28)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True)
+plt.gca().set_yticklabels([])
+plt.xticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+# %%
+plt.figure(figsize=(12, 6))
+
+plt.plot(time, id_solar_price, color = '#FDBE87', label='Solar', linewidth=3)
+plt.plot(time, id_wind_price, color = '#A3D5FF', label='Wind', linewidth=3)
+plt.plot(time, id_gas_price, color = '#CCCCCC', label='Gas', linewidth=3)
+plt.plot(time, id_bess_price, color = '#5CFF4D', label='BESS', linewidth=3)
+plt.plot(time, id_demand_price, color = 'purple', label='Retailer', linewidth=3)
+plt.xlabel('Time of day', fontsize=22)
+plt.ylabel('Bid/Offer Price (€/MWh)', fontsize=22)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True)
+# plt.gca().set_yticklabels([])
+plt.xticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+
+plt.plot(time, id_wind_price, color = '#A3D5FF', label='Wind Bid Price', linewidth=3)
+
+plt.xlabel('Time of day', fontsize=22)
+plt.ylabel('Bid Price (€/MWh)', fontsize=22)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True)
+plt.gca().set_yticklabels([])
+plt.xticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+# %% Create stepwise plot of Intraday Bid/Offer Prices
+mtu_size_hours = 0.25
+total_mtu = int(np.floor(time[-1]/mtu_size_hours))
+
+id_signals = {
+    'solar': id_solar_price,
+    'wind': id_wind_price,
+    'gas': id_gas_price,
+    'bess': id_bess_price,
+    'retailer': id_demand_price
+}
+
+avg_id_prices = {name: [] for name in id_signals.keys()}
+id_step_times = []
+for i in range(total_mtu):
+    t0 = i * mtu_size_hours
+    t1 = (i + 1) * mtu_size_hours
+    mask = (time >= t0) & (time < t1)
+    t_seg = time[mask]
+    
+    id_step_times.extend([t0, t1])
+    
+    for name, signal in id_signals.items():
+        sig_seg = signal[mask]
+        
+        if len(t_seg) > 1:
+            avg_val = np.trapz(sig_seg, t_seg) / (t_seg[-1] - t_seg[0])
+        elif len(t_seg) == 1:
+            avg_val = sig_seg[0]
+        else:
+            avg_val = avg_id_prices[name][-1] if avg_id_prices[name] else 0
+            
+        avg_id_prices[name].append(avg_val)
+
+step_data = {'time': id_step_times}
+for name in id_signals.keys():
+    step_data[name] = np.repeat(avg_id_prices[name], 2)
+
+df_id_prices = pd.DataFrame(step_data).round(4)
+df_id_prices.to_csv(id_price_filepath, index=False)
+print(f"Intraday stepwise prices exported to: {id_price_filepath}")
+
+plt.figure(figsize=(14, 7))
+colors = {'solar': '#FDBE87', 'wind': '#A3D5FF', 'gas': '#CCCCCC', 'bess': '#5CFF4D', 'retailer': 'purple'}
+
+for name in id_signals.keys():
+    plt.plot(step_data['time'], step_data[name], color=colors[name], label=name, linewidth=3)
+
+plt.xlabel('Time of day [h]', fontsize=22)
+plt.ylabel('Bid/Offer Price (€/MWh)', fontsize=22)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True, linestyle=':', alpha=0.6)
+plt.xticks(fontsize=18)
+plt.yticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+# %% Imbalance Price Plot per MTU
+mtu_size_hours = 0.25
+total_mtu = int(np.floor(time[-1]/mtu_size_hours))
+
+avg_imbal_price_per_mtu = []
+imbal_step_times = []
+
+for i in range(total_mtu):
+    t0 = i * mtu_size_hours
+    t1 = (i + 1) * mtu_size_hours
+    mask = (time >= t0) & (time < t1)
+    t_seg = time[mask]
+    mcp_seg = abs(imbal_price[mask])
+
+    if len(t_seg) > 1:
+        avg_imbal_price = np.trapz(mcp_seg, t_seg) / (t_seg[-1] - t_seg[0])
+    elif len(t_seg) == 1:
+        avg_imbal_price = mcp_seg[0]
+    else:
+        avg_imbal_price = avg_imbal_price_per_mtu[-1] if avg_imbal_price_per_mtu else 0
+
+    avg_imbal_price_per_mtu.append(avg_imbal_price) 
+
+    imbal_step_times.extend([t0, t1])
+
+step_imbal_prices = np.repeat(avg_imbal_price_per_mtu, 2)
+
+df_imbal_price = pd.DataFrame({
+    'time': imbal_step_times,
+    'price': step_imbal_prices
+})
+
+df_imbal_price = df_imbal_price.round(4)
+df_imbal_price.to_csv(imbal_price_filepath, index=False)
+
+plt.figure(figsize=(12, 6))
+
+plt.plot(imbal_step_times, step_imbal_prices, color = 'black', label='Imbalance Price', linewidth=3)
+plt.xlabel('Time of day', fontsize=22)
+plt.ylabel('Price (€/MWh)', fontsize=22)
+plt.legend(loc='upper left', fontsize=15)
+plt.grid(True)
+plt.axhline(0, color='black', linewidth=1.5, linestyle='--')
+plt.xticks(fontsize=18)
+plt.tight_layout()
+plt.show()
+
+
+# %% Calculate average price and quantity per MTU
+mtu_size_hours = 0.25
+total_mtu = int(np.floor(time[-1]/mtu_size_hours))
+
+avg_supply_per_mtu = {
+    'BESS': [],
+    'Gas': [],
+    'Wind': [],
+    'Solar': [],
+    'Demand': []
+}
+
+avg_price_per_mtu = {
+    'BESS': [],
+    'Gas': [],
+    'Wind': [],
+    'Solar': [],
+    'Demand': []
+}
+
+supply_data = {
+    'BESS': id_bess_supply,
+    'Gas': id_gas_supply,
+    'Wind': id_wind_supply,
+    'Solar': id_solar_supply,
+    'Demand': id_electricity_supply
+}
+
+price_data = {
+    'BESS': id_bess_price,
+    'Gas': id_gas_price,
+    'Wind': id_wind_price,
+    'Solar': id_solar_price,
+    'Demand': id_demand_price
+}
+
+step_times_mtu = []
+
+for i in range(total_mtu):
+    t0 = i * mtu_size_hours
+    t1 = (i + 1) * mtu_size_hours
+    
+    mask = (time >= t0) & (time < t1)
+    t_seg = time[mask]
+
+    step_times_mtu.extend([t0, t1])
+    
+    if len(t_seg) > 1:
+        duration = t_seg[-1] - t_seg[0]
+        
+        for name, data_array in supply_data.items():
+            data_seg = data_array[mask]
+            avg_value = np.trapz(data_seg, t_seg) / duration
+            avg_supply_per_mtu[name].append(avg_value)
+
+        for name, data_array in price_data.items():
+            data_seg = data_array[mask]
+            avg_value = np.trapz(data_seg, t_seg) / duration
+            avg_price_per_mtu[name].append(avg_value)
+            
+    elif len(t_seg) == 1:
+        for name, data_array in supply_data.items():
+            avg_supply_per_mtu[name].append(data_array[mask][0])
+        for name, data_array in price_data.items():
+            avg_price_per_mtu[name].append(data_array[mask][0])
+    
+    else:
+        for name in supply_data.keys():
+            prev_val = avg_supply_per_mtu[name][-1] if len(avg_supply_per_mtu[name]) > 0 else supply_data[name][0]
+            avg_supply_per_mtu[name].append(prev_val)
+
+        for name in price_data.keys():
+            prev_val = avg_price_per_mtu[name][-1] if len(avg_price_per_mtu[name]) > 0 else price_data[name][0]
+            avg_price_per_mtu[name].append(prev_val)
+
+step_supply = {name: np.repeat(vals, 2) for name, vals in avg_supply_per_mtu.items()}
+step_prices = {name: np.repeat(vals, 2) for name, vals in avg_price_per_mtu.items()}
+
+# %% Construct LOB
+
+intraday_lob_per_mtu = []
+
+bi_directional_sources = ['BESS', 'Wind', 'Solar', 'Demand']
+pure_offerer_sources = ['Gas']
+
+for i in range(total_mtu):
+    
+    sell_orders = []
+    buy_orders = []
+
+    t0 = step_times_mtu[i*2]
+    t1 = step_times_mtu[i*2 + 1]
+
+    for name in bi_directional_sources:
+        price = avg_price_per_mtu[name][i]
+        quantity = avg_supply_per_mtu[name][i] 
+
+        if name == 'Demand':
+            source_label_base = 'Retailer/Demand'
+        else:
+            source_label_base = name
+
+        if not np.isnan(price) and abs(quantity) > 1e-6:
+            
+            if quantity > 0:
+                source_label = f'{source_label_base} (Sell/Offer)'
+                sell_orders.append({
+                    'source': source_label, 
+                    'price': price, 
+                    'quantity': quantity
+                })
+            else:
+                source_label = f'{source_label_base} (Buy/Bid)'
+                buy_orders.append({
+                    'source': source_label, 
+                    'price': price, 
+                    'quantity': abs(quantity) 
+                })
+
+    for name in pure_offerer_sources:
+        price = avg_price_per_mtu[name][i]
+        quantity = avg_supply_per_mtu[name][i]
+        
+        if not np.isnan(price) and quantity > 1e-6: 
+            sell_orders.append({
+                'source': name, 
+                'price': price, 
+                'quantity': quantity
+            })
+
+    sell_orders.sort(key=lambda x: x['price'])
+    
+    buy_orders.sort(key=lambda x: x['price'], reverse=True)
+
+    bid_ask_spread = None
+    if buy_orders and sell_orders:
+        lowest_ask = sell_orders[0]['price']
+        highest_bid = buy_orders[0]['price']
+        bid_ask_spread = lowest_ask - highest_bid
+    
+    current_lob = {
+        'mtu_index': i,
+        't0': t0,
+        't1': t1,
+        'asks': sell_orders,
+        'bids': buy_orders,
+        'bid_ask_spread': bid_ask_spread
+    }
+    
+    intraday_lob_per_mtu.append(current_lob)
+
+# %% LOB Clearing Functions
+
+def clear_intraday_lob_mtu(mtu_lob: Dict[str, Any]) -> Dict[str, Any]:
+
+    current_bids = copy.deepcopy(mtu_lob['bids'])
+    current_asks = copy.deepcopy(mtu_lob['asks'])
+    
+    for order in current_bids + current_asks:
+        order['initial_qty'] = order['quantity']
+
+    settlement_results = {}
+    bid_idx = 0
+    ask_idx = 0
+    total_traded_quantity = 0
+    settlement_prices_list = []
+
+    while bid_idx < len(current_bids) and ask_idx < len(current_asks):
+        current_bid = current_bids[bid_idx]
+        current_ask = current_asks[ask_idx]
+        
+        if current_bid['price'] >= current_ask['price']:
+            trade_qty = min(current_bid['quantity'], current_ask['quantity'])
+            total_traded_quantity += trade_qty
+            
+            # Buy-Side accepts ask price
+            settlement_price = current_ask['price']
+            settlement_prices_list.append(settlement_price)
+
+            # Settle the bid
+            bid_source = current_bid['source']
+            settlement_results.setdefault(bid_source, {'settled_qty': 0, 'cost': 0, 'initial_qty': current_bid['initial_qty']})
+            settlement_results[bid_source]['settled_qty'] += trade_qty
+            settlement_results[bid_source]['cost'] += trade_qty * settlement_price * mtu_size_hours
+            
+            # Settle the ask
+            ask_source = current_ask['source']
+            settlement_results.setdefault(ask_source, {'settled_qty': 0, 'revenue': 0, 'initial_qty': current_ask['initial_qty']})
+            settlement_results[ask_source]['settled_qty'] += trade_qty
+            settlement_results[ask_source]['revenue'] += trade_qty * settlement_price * mtu_size_hours
+            
+            current_bid['quantity'] -= trade_qty
+            current_ask['quantity'] -= trade_qty
+            
+            if current_bid['quantity'] < 1e-6:
+                bid_idx += 1
+            if current_ask['quantity'] < 1e-6:
+                ask_idx += 1
+        else:
+            break
+
+    final_results = []
+    all_original_orders = mtu_lob['bids'] + mtu_lob['asks']
+    
+    for order in all_original_orders:
+        source = order['source']
+        original_qty = order['quantity']
+        data = settlement_results.get(source, {'settled_qty': 0, 'revenue': 0, 'cost': 0})
+        settled_qty = data['settled_qty']
+        order_type = 'BUY' if source in [b['source'] for b in mtu_lob['bids']] else 'SELL'
+        
+        profit_loss = data.get('revenue', 0) - data.get('cost', 0)
+        imbalanced_qty = original_qty - settled_qty
+        
+        final_results.append({
+            'source': source,
+            'price_submitted': order['price'],
+            'type': order_type,
+            'original_qty': original_qty,
+            'settled_qty': settled_qty,
+            'imbalanced_qty': imbalanced_qty,
+            'profit_loss': profit_loss,
+            'imbalance_settlement_cost': 0, 
+            'total_profit_loss': profit_loss,
+        })
+
+    return {
+        'mtu_index': mtu_lob['mtu_index'],
+        't0': mtu_lob['t0'],
+        't1': mtu_lob['t1'],
+        'total_traded_qty': total_traded_quantity,
+        'individual_settlement': final_results,
+        'settlement_prices': settlement_prices_list
+    }
+
+# Calculate imbalance settlement costs
+def calculate_imbalance_settlement(settlement_history: List[Dict], time_array: np.ndarray, imbalance_price_signal: np.ndarray) -> List[Dict]:
+    if not settlement_history or not len(time_array):
+        return settlement_history
+
+    updated_history = []
+    
+    for mtu_data in settlement_history:
+        t0 = mtu_data['t0']
+        t1 = mtu_data['t1']
+        
+        mask = (time_array >= t0) & (time_array < t1)
+        t_seg = time_array[mask]
+        price_seg = imbalance_price_signal[mask]
+
+        if len(t_seg) > 1:
+            duration = t_seg[-1] - t_seg[0]
+            imbalance_price_mtu = np.trapz(price_seg, t_seg) / duration
+        elif len(t_seg) == 1:
+            imbalance_price_mtu = price_seg[0] 
+        else:
+            imbalance_price_mtu = 0.0
+
+        net_imbalance_qty = 0.0
+        for settlement in mtu_data['individual_settlement']:
+            imbalance = settlement['imbalanced_qty']
+            signed_imbalance_qty = imbalance if settlement['type'] == 'SELL' else -imbalance 
+            net_imbalance_qty += signed_imbalance_qty
+        
+        niq_sign = np.sign(net_imbalance_qty)
+        
+        for settlement in mtu_data['individual_settlement']:
+            imbalance = settlement['imbalanced_qty']
+            signed_imbalance_qty = imbalance if settlement['type'] == 'SELL' else -imbalance
+            participant_sign = np.sign(signed_imbalance_qty)
+            
+            abs_cost_magnitude = imbalance * abs(imbalance_price_mtu) * duration
+            
+            is_cost_revenue = 0.0
+            
+            if abs(imbalance) > 1e-6 and abs(imbalance_price_mtu) > 1e-6:
+                
+                if participant_sign == niq_sign:
+                    # Aggravating: Penalty
+                    is_cost_revenue = -abs_cost_magnitude
+                    
+                elif participant_sign == -niq_sign:
+                    # Aiding: Reward
+                    is_cost_revenue = +abs_cost_magnitude
+                
+            settlement['imbalance_settlement_cost'] = is_cost_revenue
+            settlement['total_profit_loss'] = settlement['profit_loss'] + is_cost_revenue
+
+        updated_history.append(mtu_data)
+        
+    return updated_history
+
+# %% Plotting functions
+
+# Set up plot axes
+def setup_plot_axes(time_points):
+    if time_points:
+        ax = plt.gca()
+        ax.set_xticks(np.arange(0, time_points[-1] + 1, 1.0)) 
+        ax.set_xticks(np.arange(0, time_points[-1] + 1, 0.25), minor=True)
+        ax.grid(which='major', linestyle=':', alpha=0.6)
+        ax.grid(which='minor', linestyle=':', alpha=0.3)
+        plt.tick_params(which='minor', length=0)
+
+# Plot transaction price volatility
+def plot_transaction_price_volatility(intraday_settlement_history: List[Dict]):
+    if not intraday_settlement_history:
+        print("No settlement history available to plot transaction price volatility.")
+        return
+
+    scatter_prices = []
+    scatter_times = []
+    box_plot_data = []
+    
+    mtu_start_times_for_plotting = []
+    
+    for mtu_data in intraday_settlement_history:
+        t0 = mtu_data['t0']
+        t1 = mtu_data['t1']
+        prices = mtu_data.get('settlement_prices', [])
+        
+        if prices:
+            mtu_duration = t1 - t0
+            
+            jitter_range = mtu_duration / 8
+            jitter = np.random.uniform(-jitter_range, jitter_range, size=len(prices))
+            mtu_center_time = t0 + mtu_duration / 2
+            
+            scatter_times.extend(mtu_center_time + jitter)
+            scatter_prices.extend(prices)
+            
+            box_plot_data.append(prices)
+            mtu_start_times_for_plotting.append(t0)
+            
+    mtu_start_times = [mtu['t0'] for mtu in intraday_settlement_history]
+    
+    plot_times = np.array(mtu_start_times + [intraday_settlement_history[-1]['t1']])
+
+    
+    plt.figure(figsize=(14, 7))
+    ax = plt.gca()
+    
+    if box_plot_data:
+        positions = np.arange(len(box_plot_data))
+        mtu_duration = plot_times[1] - plot_times[0] if len(plot_times) > 1 else 1.0
+        width_scaling = 0.5 * mtu_duration
+        
+        bp = ax.boxplot(box_plot_data, positions=positions, widths=width_scaling, patch_artist=True, medianprops=dict(color="red"))
+        
+        for patch in bp['boxes']:
+            patch.set_facecolor('lightblue')
+            patch.set_alpha(0.4)
+        
+        scatter_x_positions = []
+        
+        time_to_plot_index = {t: i for i, t in enumerate(mtu_start_times_for_plotting)}
+        
+        for price_time in scatter_times:
+            mtu_idx = next((i for i, t_start in enumerate(mtu_start_times_for_plotting) if t_start <= price_time < t_start + mtu_duration), None)
+            
+            if mtu_idx is not None:
+                 scatter_x_positions.append(mtu_idx + (price_time - mtu_start_times_for_plotting[mtu_idx] - mtu_duration/2) / mtu_duration)
+            else:
+                 scatter_x_positions.append(np.floor(price_time / mtu_duration))
+
+
+        ax.scatter(scatter_x_positions, scatter_prices, color='darkgreen', s=10, zorder=3, alpha=0.7, label='Individual Transaction Price')
+
+        hourly_tick_indices = [i for i, t in enumerate(mtu_start_times_for_plotting) if t % 1.0 == 0.0]
+        hourly_tick_labels = [f'{int(t)}h' for t in mtu_start_times_for_plotting if t % 1.0 == 0.0]
+        
+        ax.set_xticks(hourly_tick_indices)
+        ax.set_xticklabels(hourly_tick_labels)
+        ax.set_xticks(positions, minor=True)
+        ax.tick_params(axis='x', which='minor', length=0)
+        
+    else:
+        ax.text(0.5, 0.5, "No transactions occurred in this period.", 
+                transform=ax.transAxes, ha='center', va='center')
+
+
+    plt.title('Intraday Transaction Prices and Distribution', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Price (€/MWh)', fontsize=14)
+    plt.legend(loc='upper right')
+    
+    if box_plot_data:
+        ax.set_xlim(-0.5, len(positions) - 0.5)
+        ax.grid(axis='x', which='major', linestyle=':', alpha=0.6)
+        ax.grid(axis='x', which='minor', linestyle=':', alpha=0.3)
+        ax.grid(axis='y', which='major', linestyle=':', alpha=0.6)
+
+    plt.tight_layout()
+    plt.show()
+
+def _generate_stack_data(orders, is_bid, base_colors):
+    all_prices = sorted(list(set([order['price'] for order in orders])))
+    aggregated_orders = {price: [] for price in all_prices}
+    for order in orders:
+        aggregated_orders[order['price']].append({'qty': order['quantity'], 'src': order['source'].split(' ')[0]})
+
+    stack_data = [] 
+    
+    for price in all_prices:
+        current_bottom = 0
+        sorted_orders = sorted(aggregated_orders[price], key=lambda x: x['qty'], reverse=True)
+
+        for order in sorted_orders:
+            height = order['qty']
+            y_bottom = current_bottom 
+            
+            stack_data.append((price, y_bottom, height, base_colors.get(order['src']), order['src']))
+            current_bottom += height
+    return stack_data, all_prices
+
+def format_time(decimal_hour: float) -> str:
+    hours = int(decimal_hour)
+    minutes = int(round((decimal_hour - hours) * 60))
+    return f"{hours:02d}:{minutes:02d}h"
+
+# Plot evenly spaced MTU LOB snapshot
+def spaced_plot_mtu_lob_snapshot(mtu_lob: Dict[str, Any], intraday_settlement_history: List[Dict]):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import copy
+    
+    mtu_index = mtu_lob.get('mtu_index', 0)
+    
+    t0_str = format_time(mtu_lob.get('t0', 0))
+    t1_str = format_time(mtu_lob.get('t1', 0))
+    time_range = f"{t0_str} - {t1_str}"
+
+    if not mtu_lob or ('bids' not in mtu_lob and 'asks' not in mtu_lob):
+        print("Error: Invalid or empty MTU LOB data provided for snapshot.")
+        return
+
+    bids = mtu_lob.get('bids', [])
+    asks = mtu_lob.get('asks', [])
+    
+    if not bids and not asks:
+        print(f"MTU {mtu_lob.get('mtu_index', '?')} is empty (no bids or asks).")
+        return
+    
+    settled_data = next((d for d in intraday_settlement_history if d['mtu_index'] == mtu_index), None)
+    if not settled_data:
+        print(f"Error: Settlement data not found for MTU {mtu_index}.")
+        return
+
+    base_colors = {'BESS': '#5CFF4D', 'Wind': '#A3D5FF', 'Solar': '#FDBE87', 'Gas': '#CCCCCC', 'Retailer/Demand': 'purple'}
+    bar_width = 0.9 # Increased bar width for better visibility when offset is applied
+    
+    all_initial_quantities = [order['quantity'] for order in bids + asks]
+    max_qty = max(all_initial_quantities) if all_initial_quantities else 10
+    y_lim = max_qty * 1.1 
+    
+    all_prices_sorted = sorted(list(set([order['price'] for order in bids + asks])))
+    price_to_index = {price: i for i, price in enumerate(all_prices_sorted)}
+    
+    initial_ask_orders = asks
+    initial_bid_orders = bids
+
+    imbalance_orders = []
+    original_orders = []
+    
+    for s in settled_data['individual_settlement']:
+        if abs(s['imbalanced_qty']) > 1e-6 or abs(s['original_qty']) > 1e-6:
+            price = s['price_submitted']
+            order_type = s['type']
+            source = s['source']
+            
+            imbalance_orders.append({'source': source, 'price': price, 'quantity': s['imbalanced_qty'], 'type': order_type})
+            
+            original_orders.append({'source': source, 'price': price, 'quantity': s['original_qty'], 'type': order_type})
+
+    imbalance_asks = [o for o in imbalance_orders if o['type'] == 'SELL']
+    imbalance_bids = [o for o in imbalance_orders if o['type'] == 'BUY']
+    original_asks = [o for o in original_orders if o['type'] == 'SELL']
+    original_bids = [o for o in original_orders if o['type'] == 'BUY']
+    
+    ask_initial_stack, _ = _generate_stack_data(initial_ask_orders, is_bid=False, base_colors=base_colors)
+    bid_initial_stack, _ = _generate_stack_data(initial_bid_orders, is_bid=True, base_colors=base_colors)
+
+    ask_imbalance_stack, _ = _generate_stack_data(imbalance_asks, is_bid=False, base_colors=base_colors)
+    bid_imbalance_stack, _ = _generate_stack_data(imbalance_bids, is_bid=True, base_colors=base_colors)
+    
+    ask_original_stack, _ = _generate_stack_data(original_asks, is_bid=False, base_colors=base_colors)
+    bid_original_stack, _ = _generate_stack_data(original_bids, is_bid=True, base_colors=base_colors)
+
+    # Plotting helpers
+    def render_initial(ax):
+        for price, bottom, height, color, _ in ask_initial_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, edgecolor='orange', linewidth=2)
+        for price, bottom, height, color, _ in bid_initial_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, edgecolor='blue', linewidth=2, hatch='/')
+
+    def render_cleared(ax):
+        for price, bottom, height, color, _ in ask_original_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, alpha=0.2, edgecolor='orange', linewidth=1, linestyle='--')
+        for price, bottom, height, color, _ in bid_original_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, alpha=0.2, edgecolor='blue', linewidth=1, linestyle='--', hatch='/')
+        for price, bottom, height, color, _ in ask_imbalance_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, edgecolor='orange', linewidth=2)
+        for price, bottom, height, color, _ in bid_imbalance_stack:
+            ax.bar(price_to_index[price], height, width=bar_width, bottom=bottom, color=color, edgecolor='blue', linewidth=2, hatch='/')
+
+    def apply_formatting(ax, title):
+        ax.set_title(title, fontsize=14)
+        ax.set_xlabel('Price [€/MWh]', fontsize=10)
+        ax.set_ylabel('Quantity [MWh]', fontsize=10)
+        ax.set_ylim(0, y_lim)
+        ax.set_xticks(np.arange(len(all_prices_sorted)))
+        ax.set_xticklabels([f'€{p:.2f}' for p in all_prices_sorted], rotation=45, ha='right')
+        ax.axhline(0, color='black', linewidth=0.8)
+
+    legend_handles = [
+        mpatches.Patch(facecolor='white', edgecolor='orange', label='Ask/Sell Orders'),
+        mpatches.Patch(facecolor='white', edgecolor='blue', hatch='//', label='Bid/Buy Orders')
+    ]
+
+    # Combined plot
+    fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
+    render_initial(ax1)
+    apply_formatting(ax1, "Initial LOB")
+    render_cleared(ax2)
+    apply_formatting(ax2, "Cleared LOB (Remaining Imbalance)")
+    fig1.legend(handles=legend_handles, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.05))
+    fig1.suptitle(f'LOB Snapshot of MTU ({time_range})', fontsize=16, y=1.08)
+    fig1.tight_layout()
+
+    # Only initial plot
+    fig2, ax_init = plt.subplots(figsize=(10, 6))
+    render_initial(ax_init)
+    apply_formatting(ax_init, '')
+    #apply_formatting(ax_init, f'Initial LOB for MTU ({time_range})')
+    fig2.legend(handles=legend_handles, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.05))
+    fig2.tight_layout()
+
+    # Only cleared plot
+    fig3, ax_clear = plt.subplots(figsize=(10, 6))
+    render_cleared(ax_clear)
+    apply_formatting(ax_clear, '')
+    #apply_formatting(ax_clear, f'Uncleared Orders for MTU ({time_range})')
+    fig3.legend(handles=legend_handles, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.05))
+    fig3.tight_layout()
+
+    plt.show()
+
+# Plot bid-ask spread
+def plot_bid_ask_spread(intraday_lob_per_mtu: List[Dict]):
+    
+    if not intraday_lob_per_mtu:
+        print("No LOB data available to calculate Bid-Ask Spread.")
+        return
+
+    spread_values = []
+    
+    for mtu_lob in intraday_lob_per_mtu:
+        spread = mtu_lob.get('bid_ask_spread')
+        
+        if spread is not None and not np.isnan(spread):
+            spread_values.append(spread)
+        else:
+            spread_values.append(np.nan) 
+
+    plot_times = []
+    for mtu in intraday_lob_per_mtu:
+        plot_times.append(mtu['t0'])
+    plot_times.append(intraday_lob_per_mtu[-1]['t1'])
+    
+    plot_values = np.array(spread_values)
+    plot_values = np.append(plot_values, plot_values[-1])
+    plot_values = np.array(plot_values)
+
+    plt.figure(figsize=(14, 7))
+    plt.step(plot_times, plot_values, where='post', label='Bid-Ask Spread', linewidth=2, color='darkred')
+    
+    plt.axhline(0, color='black', linewidth=1.0, linestyle='-')
+
+    if np.any(plot_values < 1e-6) and np.any(plot_values >= 0):
+         plt.axhline(0, color='darkgreen', linewidth=1.5, linestyle='--')
+         
+    plt.title('Intraday Market: Bid-Ask Spread Over Time', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Price Difference ($)', fontsize=14)
+    plt.legend(loc='upper right')
+    
+    setup_plot_axes(plot_times)
+    
+    plt.tight_layout()
+    plt.show()
+
+# Generic cumulative P/L function
+def _plot_cumulative_pl_generic(settlement_history: List[Dict], pl_field: str, title: str, export_path: str = None):
+    if not settlement_history:
+        print(f"No settlement history available to plot {pl_field}.")
+        return
+
+    pl_data = {}
+    time_points = []
+    colors = {'BESS': '#5CFF4D', 'Wind': '#A3D5FF', 'Solar': '#FDBE87', 'Gas': '#CCCCCC', 'Retailer/Demand': 'purple'}
+    
+    unique_sources = set(s['source'] for mtu_data in settlement_history for s in mtu_data['individual_settlement'])
+
+    for mtu_data in settlement_history:
+        time_points.append(mtu_data['t0'])
+        current_pl_map = {s['source']: s.get(pl_field, 0.0) for s in mtu_data['individual_settlement']}
+        
+        for source in unique_sources:
+            pl_data.setdefault(source, []).append(current_pl_map.get(source, 0.0))
+
+    time_points.append(settlement_history[-1]['t1'])
+    for source in pl_data.keys():
+        pl_data[source].append(pl_data[source][-1])
+
+    net_income_by_base_source = {}
+    base_names = set(source.split(' ')[0] for source in unique_sources)
+    
+    for base_name in base_names:
+        related_pl_lists = [pl_list for source, pl_list in pl_data.items() if source.startswith(base_name)]
+        if not related_pl_lists: continue
+            
+        net_instantaneous_pl = np.sum(related_pl_lists, axis=0)
+        cumulative_sum = np.cumsum(net_instantaneous_pl[:-1])
+        net_income_by_base_source[base_name] = np.append(cumulative_sum, cumulative_sum[-1] if cumulative_sum.size > 0 else 0)
+   
+    time_points_with_end = [settlement_history[0]['t0']] + [mtu['t1'] for mtu in settlement_history]
+
+    if export_path:
+        csv_data = {'time': time_points_with_end}
+        for base_name, cumulative_pl in net_income_by_base_source.items():
+            col_name = base_name.lower().replace('/', '_')
+            csv_data[col_name] = cumulative_pl
+        
+        df_pl = pd.DataFrame(csv_data)
+        df_pl.round(2).to_csv(export_path, index=False)
+        print(f"TikZ data exported to: {export_path}")
+
+    plt.figure(figsize=(14, 7))
+    
+    for base_name, cumulative_pl in net_income_by_base_source.items():
+        color = colors.get(base_name, 'black')
+        
+        if np.any(np.abs(cumulative_pl) > 1e-6):
+            plt.step(time_points, cumulative_pl, where='post', 
+                     label=f'{base_name}', 
+                     color=color, linestyle='-', 
+                     linewidth=2)
+
+    plt.axhline(0, color='black', linewidth=1.0, linestyle='-')
+
+    plt.title(title, fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Cumulative Net Income (€)', fontsize=14)
+    plt.legend(loc='lower left', ncol=2)
+    
+    setup_plot_axes(time_points)
+    plt.tight_layout()
+    plt.show()
+
+# Specific cumulative P/L functions
+def plot_cumulative_lob_pl(settlement_history: List[Dict]):
+    """Plots the cumulative P/L from LOB trading only."""
+    _plot_cumulative_pl_generic(settlement_history, 'profit_loss', 'Intraday Trading Income per Market Participant', export_path=id_trading_income_filepath)
+
+def plot_cumulative_imbalance_pl(settlement_history: List[Dict]):
+    """Plots the cumulative P/L from imbalance settlement only."""
+    _plot_cumulative_pl_generic(settlement_history, 'imbalance_settlement_cost', 'Imbalance Settlement Income per Market Participant', export_path=imbal_income_filepath)
+
+def plot_cumulative_total_pl(settlement_history: List[Dict]):
+    """Plots the cumulative P/L from LOB + imbalance settlement (Total P/L)."""
+    _plot_cumulative_pl_generic(settlement_history, 'total_profit_loss', 'Total Net Income per Market Participant', export_path=total_income_filepath)
+
+# Plot original quantities submitted
+def plot_original_quantities(intraday_lob_per_mtu: List[Dict]):
+    
+    if not intraday_lob_per_mtu:
+        print("No LOB data available to plot original quantities.")
+        return
+
+    instantaneous_signed_qty = {}
+    time_points = []
+    colors = {'BESS': '#5CFF4D', 'Wind': '#A3D5FF', 'Solar': '#FDBE87', 'Gas': '#CCCCCC', 'Retailer/Demand': 'purple'}
+    base_names_set = set(colors.keys())
+
+    for mtu_data in intraday_lob_per_mtu:
+        t0 = mtu_data['t0']
+        time_points.append(t0)
+        all_orders = mtu_data['bids'] + mtu_data['asks']
+        
+        mtu_instantaneous_sum = {base: 0.0 for base in base_names_set}
+
+        for order in all_orders:
+            source = order['source']
+            order_type = 'BUY' if source in [b['source'] for b in mtu_data['bids']] else 'SELL'
+            base_name = source.split(' ')[0] 
+            
+            if base_name not in base_names_set: continue
+            
+            value = order['quantity']
+            signed_value = value if order_type == 'SELL' else -value
+            mtu_instantaneous_sum[base_name] += signed_value
+        
+        for base in base_names_set:
+            instantaneous_signed_qty.setdefault(base, []).append(mtu_instantaneous_sum[base])
+
+    aggregated_net_qty = {}
+    if not time_points: return
+    time_points.append(intraday_lob_per_mtu[-1]['t1'])
+
+    for base_name, qty_list in instantaneous_signed_qty.items():
+        aggregated_net_qty[base_name] = np.append(qty_list, qty_list[-1])
+        if len(aggregated_net_qty[base_name]) != len(time_points): continue
+    
+    csv_data = {'time': time_points}
+    for base_name, qty_list in instantaneous_signed_qty.items():
+        csv_data[base_name.lower().replace('/', '_')] = np.append(qty_list, qty_list[-1])
+    
+    if init_qty_filepath:
+        df = pd.DataFrame(csv_data)
+        df.round(4).to_csv(init_qty_filepath, index=False)
+        print(f"TikZ data exported to: {init_qty_filepath}")
+
+    plt.figure(figsize=(14, 7))
+    
+    for base_name, qty_list in aggregated_net_qty.items():
+        color = colors.get(base_name, 'black')
+        
+        if np.any(np.abs(qty_list) > 1e-6):
+            plt.step(time_points, qty_list, where='post', 
+                     label=base_name, 
+                     color=color, 
+                     linestyle='-', 
+                     linewidth=2)
+
+    plt.axhline(0, color='black', linewidth=1.0, linestyle='-')
+    plt.title('Initial Intraday Market Net Bid/Offer Quantities per Market Participant', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Net Quantity Submitted (MWh)', fontsize=14)
+    plt.legend(loc='lower left', ncol=3)
+    setup_plot_axes(time_points)
+    plt.tight_layout()
+    plt.show()
+
+# Plot remaining imbalance after LOB clearing
+def plot_remaining_imbalance(settlement_history: List[Dict]):
+    if not settlement_history:
+        print("No settlement history available to plot remaining imbalance.")
+        return
+
+    instantaneous_signed_imbalance = {}
+    time_points = []
+    colors = {'BESS': '#5CFF4D', 'Wind': '#A3D5FF', 'Solar': '#FDBE87', 'Gas': '#CCCCCC', 'Retailer/Demand': 'purple'}
+    base_names_set = set(colors.keys())
+
+    for mtu_data in settlement_history:
+        time_points.append(mtu_data['t0'])
+        mtu_instantaneous_sum = {base: 0.0 for base in base_names_set}
+
+        for settlement in mtu_data['individual_settlement']:
+            source = settlement['source']
+            imbalance = settlement['imbalanced_qty']
+            order_type = settlement['type']
+            base_name = source.split(' ')[0] 
+            
+            if base_name not in base_names_set: continue
+
+            signed_imbalance = imbalance if order_type == 'SELL' else -imbalance
+            mtu_instantaneous_sum[base_name] += signed_imbalance
+        
+        for base in base_names_set:
+            instantaneous_signed_imbalance.setdefault(base, []).append(mtu_instantaneous_sum[base])
+
+    aggregated_net_imbalance = {}
+    if not time_points: return
+
+    time_points.append(settlement_history[-1]['t1'])
+
+    for base_name, imbalance_list in instantaneous_signed_imbalance.items():
+        aggregated_net_imbalance[base_name] = np.append(imbalance_list, imbalance_list[-1])
+        if len(aggregated_net_imbalance[base_name]) != len(time_points): continue
+
+    csv_data = {'time': time_points}
+    for base_name, imbalance_list in instantaneous_signed_imbalance.items():
+        col_name = base_name.lower().replace('/', '_')
+        csv_data[col_name] = np.append(imbalance_list, imbalance_list[-1])
+
+
+    if imbal_filepath:
+        df = pd.DataFrame(csv_data)
+        df.round(4).to_csv(imbal_filepath, index=False)
+        print(f"TikZ data exported to: {imbal_filepath}")
+    
+    plt.figure(figsize=(14, 7))
+    
+    for base_name, imbalance_list in aggregated_net_imbalance.items():
+        color = colors.get(base_name, 'black')
+        
+        if np.any(np.abs(imbalance_list) > 1e-6):
+            plt.step(time_points, imbalance_list, where='post', 
+                     label=base_name, 
+                     color=color, 
+                     linestyle='-', 
+                     linewidth=2)
+
+    plt.axhline(0, color='black', linewidth=1.0, linestyle='-')
+    plt.title('Net Remaining Imbalance per Market Participant after Intraday Clearing', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Net Imbalance Quantity (MWh)', fontsize=14)
+    plt.legend(loc='lower left', ncol=3)
+    setup_plot_axes(time_points)
+    plt.tight_layout()
+    plt.show()
+
+# Plot net imbalance vs. TSO balancing action
+def plot_net_imbalance(settlement_history: List[Dict], time_array: np.ndarray, balance_supply_signal: np.ndarray, imbalance_price_signal: np.ndarray):
+    if not settlement_history:
+        print("No settlement history available to plot net imbalance.")
+        return
+
+    net_imbalance_list = []
+    system_cost_list = []
+    tso_action_qty_list = []
+    time_points = []
+    
+    for mtu_data in settlement_history:
+        t0 = mtu_data['t0']
+        time_points.append(t0)
+        net_imbalance_mtu = 0.0
+        
+        for settlement in mtu_data['individual_settlement']:
+            imbalance = settlement['imbalanced_qty']
+            order_type = settlement['type']
+            signed_imbalance = imbalance if order_type == 'SELL' else -imbalance
+            net_imbalance_mtu += signed_imbalance
+            
+        net_imbalance_list.append(net_imbalance_mtu)
+
+        t1 = mtu_data['t1']
+        mask = (time_array >= t0) & (time_array < t1)
+        t_seg = time_array[mask]
+        bal_supply_seg = balance_supply_signal[mask]
+
+        if len(t_seg) > 1:
+            duration = t_seg[-1] - t_seg[0]
+            avg_price = np.trapz(imbalance_price_signal[mask], t_seg) / duration
+            avg_qty = np.trapz(bal_supply_seg, t_seg) / duration
+        elif len(t_seg) == 1:
+            avg_price = imbalance_price_signal[mask][0]
+            avg_qty = bal_supply_seg[0]
+        else:
+            avg_price = imbalance_price_signal[mask][0] if np.any(mask) else (avg_price if 'avg_price' in locals() else 0.0)
+            avg_qty   = tso_action_qty_list[-1] if len(tso_action_qty_list) > 0 else 0.0
+        tso_action_qty_list.append(avg_qty)
+        
+        mtu_cost = net_imbalance_mtu * abs(avg_price) * duration
+        system_cost_list.append(mtu_cost)
+
+    time_points.append(settlement_history[-1]['t1'])
+    net_imbalance_list.append(net_imbalance_list[-1])
+    tso_action_qty_list.append(tso_action_qty_list[-1])
+
+    plt.figure(figsize=(14, 7))
+    ax1 = plt.gca()
+
+    if net_imbal_filepath:
+        df = pd.DataFrame({
+            'time': time_points,
+            'net_imbalance': net_imbalance_list,
+            'tso_reserve': tso_action_qty_list
+        })
+        df.round(4).to_csv(net_imbal_filepath, index=False)
+        print(f"TikZ data exported to: {net_imbal_filepath}")
+
+    # Plot net imbalance quantity
+    ax1.step(time_points, net_imbalance_list, where='post', 
+             label='Net System Imbalance', 
+             color='#33AFFF', linewidth=3)
+    
+    ax1.fill_between(time_points, net_imbalance_list, 0, where=(np.array(net_imbalance_list) > 0), 
+                     color='#33AFFF', alpha=0.3, step='post')
+    ax1.fill_between(time_points, net_imbalance_list, 0, where=(np.array(net_imbalance_list) < 0), 
+                     color='#FF3366', alpha=0.3, step='post')
+
+    # Plot TSO balancing action
+    ax1.step(time_points, tso_action_qty_list, where='post', 
+             label='Activated Balancing Reserve', 
+             color='black', linestyle=':', linewidth=2)
+    
+    ax1.axhline(0, color='black', linewidth=1.0, linestyle='-')
+    
+    plt.title('Net System Imbalance vs. Activated Balancing Reserve', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Quantity (MWh)', fontsize=14)
+    plt.legend(loc='upper right')
+    
+    setup_plot_axes(time_points) 
+    plt.tight_layout()
+    plt.show()
+    return sum(system_cost_list[:-1])
+
+# Clear the LOB for all MTUs
+if 'intraday_lob_per_mtu' not in locals() or not intraday_lob_per_mtu:
+    print("Error: 'intraday_lob_per_mtu' is not defined or is empty. Cannot proceed with clearing.")
+    intraday_settlement_history = [] 
+else:
+    intraday_settlement_history = []
+    for mtu_lob in intraday_lob_per_mtu:
+        settlement_data = clear_intraday_lob_mtu(mtu_lob)
+        intraday_settlement_history.append(settlement_data) 
+    
+    print(f"LOB Clearing complete for {len(intraday_settlement_history)} MTUs.")
+
+
+if 'time' in locals() and 'imbal_price' in locals() and intraday_settlement_history:
+    intraday_settlement_history = calculate_imbalance_settlement(
+        intraday_settlement_history, 
+        time, 
+        imbal_price
+    )
+    print("Imbalance Settlement calculation complete.")
+elif intraday_settlement_history:
+    print("Warning: Skipping Imbalance Settlement. 'time' or 'imbal_price' variables are missing.")
+
+# %% Plot cumulative DAM + IDM + BM income
+def plot_total_market_income(settlement_history: List[Dict], da_income_dict: Dict[str, List[float]], mtu_times: List[float]):
+    if not settlement_history:
+        print("No settlement history available for Total Income calculation.")
+        return
+
+    total_income_data = {}
+    colors = {'BESS': '#5CFF4D', 'Wind': '#A3D5FF', 'Solar': '#FDBE87', 'Gas': '#CCCCCC', 'Coal': '#9E9E9E', 'Nuclear': '#B0BEC5', 'Retailer/Demand': 'purple'}
+    
+    unique_sources = set(s['source'].split(' ')[0] for mtu in settlement_history for s in mtu['individual_settlement'])
+    all_participants = unique_sources.union(set(da_income_dict.keys()))
+
+    id_is_pl_per_mtu = {p: [0.0] * (len(settlement_history)) for p in all_participants}
+    
+    for i, mtu_data in enumerate(settlement_history):
+        for s in mtu_data['individual_settlement']:
+            base_name = s['source'].split(' ')[0]
+            id_is_pl_per_mtu[base_name][i] += s.get('total_profit_loss', 0.0)
+
+    plt.figure(figsize=(14, 7))
+    combined_csv_data = {'time': mtu_times}
+
+    for p in all_participants:
+        da_cum = np.array(da_income_dict.get(p, [0.0] * len(mtu_times)))
+        
+        id_is_cum = np.concatenate(([0.0], np.cumsum(id_is_pl_per_mtu.get(p, [0.0] * (len(mtu_times)-1)))))
+        
+        total_cum = da_cum + id_is_cum
+        
+        color = colors.get(p, 'black')
+        if np.any(np.abs(total_cum) > 1e-2):
+            plt.step(mtu_times, total_cum, where='post', label=f'{p}', color=color, linewidth=2.5)
+            combined_csv_data[p.lower().replace('/', '_')] = total_cum
+
+    plt.axhline(0, color='black', linewidth=1.0, linestyle='-')
+    plt.title('Total Portfolio Cumulative Income (DAM + IDM +  BM)', fontsize=16)
+    plt.xlabel('Time (Hours)', fontsize=14)
+    plt.ylabel('Cumulative Net Income (€)', fontsize=14)
+    plt.legend(loc='upper left', ncol=2, fontsize=10)
+    plt.grid(True, linestyle=':', alpha=0.6)
+    plt.xticks([0, 4, 8, 12, 16, 20, 24], fontsize=12)
+    plt.xlim(0, 24)
+    
+    pd.DataFrame(combined_csv_data).round(2).to_csv(total_portfolio_income_path, index=False)
+    print(f"Total portfolio data exported to: {total_portfolio_income_path}")
+
+    plt.tight_layout()
+    plt.show()
+
+# %%  Plotting
+
+# PLOT 1 - Original Quantities Submitted 
+if 'intraday_lob_per_mtu' in locals() and intraday_lob_per_mtu:
+    plot_original_quantities(intraday_lob_per_mtu)
+
+# PLOT 2 - Remaining Imbalance per Generator
+if intraday_settlement_history:
+    print("\n--- Plotting Net Remaining Imbalance per Generator ---")
+    plot_remaining_imbalance(intraday_settlement_history)
+
+# PLOT 3 - Net Imbalance (Net System Imbalance vs. TSO Action)
+if intraday_settlement_history and 'time' in locals() and 'id_bal_supply' in locals():
+    plot_net_imbalance(intraday_settlement_history, time, id_bal_supply, imbal_price)
+elif intraday_settlement_history:
+    print("Warning: Skipping Net Imbalance Plot. 'time' or 'id_bal_supply' variables are missing.")
+
+# PLOT 4 - Cumulative LOB Profit/Loss (Intraday Trading Income)
+if intraday_settlement_history:
+    plot_cumulative_lob_pl(intraday_settlement_history)
+
+# PLOT 5 - Cumulative Imbalance Settlement P/L
+if intraday_settlement_history:
+    plot_cumulative_imbalance_pl(intraday_settlement_history)
+
+# PLOT 6 - Cumulative Total P/L (IDM + BM)
+if intraday_settlement_history:
+    plot_cumulative_total_pl(intraday_settlement_history)
+
+# PLOT 7 - Total Market Income (DAM + IDM + BM)
+if intraday_settlement_history:
+    plot_total_market_income(intraday_settlement_history, cumulative_da_income, mtu_times)
+
+# PLOT 8 - LOB Snapshot for a Single MTU
+if 'intraday_lob_per_mtu' in locals() and intraday_lob_per_mtu:
+    spaced_plot_mtu_lob_snapshot(intraday_lob_per_mtu[84], intraday_settlement_history)
+
+intraday_settlement_history[84]
+
+# PLOT 9 - Bid-Ask Spread Over Time
+if 'intraday_lob_per_mtu' in locals() and intraday_lob_per_mtu:
+    plot_bid_ask_spread(intraday_lob_per_mtu)
+
+# PLOT 10 - Price Volatility per MTU Over Time
+if 'intraday_lob_per_mtu' in locals() and intraday_lob_per_mtu:
+    plot_transaction_price_volatility(intraday_settlement_history)
+
+# %% Controller performance
+def compute_balancing_kpis(settlement_history, time_array,
+                           balance_supply_signal, imbalance_price_signal,
+                           mtu_size_hours=0.25):
+
+    system_cost_list = []
+    total_energy = 0.0
+    total_id_cleared_energy = 0.0
+    weighted_price_sum = 0.0
+
+    for mtu_data in settlement_history:
+        t0 = mtu_data['t0']
+        t1 = mtu_data['t1']
+
+        mask = (time_array >= t0) & (time_array < t1)
+        t_seg = time_array[mask]
+        
+        if 'total_traded_qty' in mtu_data:
+            total_id_cleared_energy += abs(mtu_data['total_traded_qty'])
+
+        if len(t_seg) > 1:
+            duration = t_seg[-1] - t_seg[0]
+            avg_price = np.trapz(imbalance_price_signal[mask], t_seg) / duration
+            avg_qty = np.trapz(balance_supply_signal[mask], t_seg) / duration
+        elif len(t_seg) == 1:
+            avg_price = imbalance_price_signal[mask][0]
+            avg_qty = balance_supply_signal[mask][0]
+        else:
+            avg_price = 0.0
+            avg_qty = 0.0
+
+        mtu_energy = abs(avg_qty) * mtu_size_hours
+        total_energy += mtu_energy
+
+        mtu_cost = mtu_energy * abs(avg_price)
+        system_cost_list.append(mtu_cost)
+        
+        weighted_price_sum += abs(avg_price) * mtu_energy
+
+    total_cost = sum(system_cost_list[:-1])
+    avg_imbalance_price = weighted_price_sum / total_energy if total_energy > 1e-9 else 0.0
+
+    print(f"Total balancing cost: €{total_cost:,.2f}")
+    print(f"Total activated balancing energy: {total_energy:,.2f} MWh")
+    print(f"Average imbalance price: €{avg_imbalance_price:,.2f}/MWh")
+    print(f"Total cleared ID energy traded: {total_id_cleared_energy:,.2f} MWh")
+
+    return total_cost, total_energy, avg_imbalance_price
+
+compute_balancing_kpis(intraday_settlement_history, time, id_bal_supply, imbal_price, mtu_size_hours=0.25)
+
+# %% Income per generator
+def extract_asset_income(asset_name, settlement_history, da_income_dict):
+    total_da = da_income_dict.get(asset_name, [0])[-1]
+    total_id_trading = 0.0
+    total_imbalance_settlement = 0.0
+
+    for mtu in settlement_history:
+        for s in mtu['individual_settlement']:
+            if asset_name in s['source']:
+                total_id_trading += s.get('profit_loss', 0.0)
+                total_imbalance_settlement += s.get('imbalance_settlement_cost', 0.0)
+
+    total_combined = total_da + total_id_trading + total_imbalance_settlement
+
+    print(f"--- Financial Summary for {asset_name} ---")
+    print(f"Total Day-Ahead Income:       €{total_da:,.2f}")
+    print(f"Total Intraday Trading:       €{total_id_trading:,.2f}")
+    print(f"Total Imbalance Settlement:   €{total_imbalance_settlement:,.2f}")
+    print(f"------------------------------------------")
+    print(f"TOTAL NET INCOME:             €{total_combined:,.2f}\n")
+
+    return {
+        'DA': total_da,
+        'ID': total_id_trading,
+        'Imbal': total_imbalance_settlement,
+        'Total': total_combined
+    }
+
+wind_summary = extract_asset_income('Wind', intraday_settlement_history, cumulative_da_income)
